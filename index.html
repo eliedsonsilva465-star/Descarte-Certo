@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Descarte Certo</title>
+<!--
+=== CONFIGURAÇÃO NECESSÁRIA NO FIREBASE ===
+1) Authentication > Sign-in method: ative "Anônimo".
+2) Realtime Database: crie o banco e preencha DB_URL abaixo com a URL dele.
+3) Realtime Database > Regras: cole as regras abaixo e publique.
+
+{
+ "rules": { "rooms": { "$r": {
+  "pw":   { ".read": false, ".write": "auth!=null && !data.exists()" },
+  "join": { "$u": { ".read": "auth.uid===$u",
+     ".write": "auth.uid===$u && (!newData.exists() || newData.val()===root.child('rooms/'+$r+'/pw').val())" } },
+  "meta": { ".read": "auth!=null",
+     ".write": "auth!=null && !data.exists() && newData.child('hostId').val()===auth.uid",
+     "hostId": { ".write": "auth!=null && newData.val()===auth.uid && !root.child('rooms/'+$r+'/players/'+data.val()).exists()" } },
+  "players":    { ".read": "auth!=null", "$u": { ".write": "auth.uid===$u && (!newData.exists() || root.child('rooms/'+$r+'/join/'+$u).exists())" } },
+  "spectators": { ".read": "auth!=null", "$u": { ".write": "auth.uid===$u && (!newData.exists() || root.child('rooms/'+$r+'/join/'+$u).exists())" } },
+  "names": { ".read": "auth!=null", "$n": { ".validate": "!newData.exists() || newData.val()===auth.uid",
+     ".write": "auth!=null && (!data.exists() || data.val()===auth.uid) && (!newData.exists() || root.child('rooms/'+$r+'/join/'+auth.uid).exists())" } },
+  "game":    { ".read": "auth!=null", ".write": "root.child('rooms/'+$r+'/meta/hostId').val()===auth.uid" },
+  "order":   { ".read": "auth!=null", ".write": "root.child('rooms/'+$r+'/meta/hostId').val()===auth.uid" },
+  "reveal":  { ".read": "auth!=null", ".write": "root.child('rooms/'+$r+'/meta/hostId').val()===auth.uid" },
+  "results": { ".read": "auth!=null", ".write": "root.child('rooms/'+$r+'/meta/hostId').val()===auth.uid" },
+  "scores":  { ".read": "auth!=null", ".write": "root.child('rooms/'+$r+'/meta/hostId').val()===auth.uid" },
+  "answers": { "$q": { ".read": "root.child('rooms/'+$r+'/meta/hostId').val()===auth.uid",
+     "$u": { ".read": "auth.uid===$u",
+       ".write": "auth.uid===$u && !data.exists() && root.child('rooms/'+$r+'/players/'+$u).exists() && root.child('rooms/'+$r+'/game/status').val()==='question' && (root.child('rooms/'+$r+'/game/q').val()+'')===$q && now>=root.child('rooms/'+$r+'/game/answerFrom').val() && now<=root.child('rooms/'+$r+'/game/endsAt').val()",
+       ".validate": "newData.hasChildren(['c','t']) && newData.child('c').val()>=0 && newData.child('c').val()<=3 && newData.child('t').val()===now" } } }
+ } } }
+}
+-->
+<style>
+:root{--bg:#f2f5f1;--card:#fff;--tx:#1e2a22;--mu:#667568;--g:#2f8f5b;--gs:#dcefe3;--bd:#d3ddd5;--bad:#c4554d;--bads:#f6dcda}
+:root[data-t=dark]{--bg:#161b18;--card:#212823;--tx:#e8efe9;--mu:#9aa89d;--g:#4cc380;--gs:#1f3a2b;--bd:#323c35;--bad:#e0746c;--bads:#3d2523}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--tx);font:17px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:background .2s}
+section{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;gap:12px;max-width:520px;margin:0 auto;padding:60px 18px 20px}
+#game{justify-content:flex-start;padding-top:54px;gap:8px}
+h1{margin:0;font-size:2rem;text-align:center;letter-spacing:.5px}
+h2{margin:0;text-align:center}
+.big{font-size:4rem;text-align:center}
+.sub{text-align:center;color:var(--mu);margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px}
+button,input,select{font:inherit;color:var(--tx);width:100%;min-height:54px;border-radius:12px;border:2px solid var(--bd);background:var(--card);padding:10px 14px}
+input,select{outline:0}input:focus,select:focus{border-color:var(--g)}
+button{cursor:pointer;font-weight:700;transition:transform .08s,background .15s,border-color .15s}
+button:active:not(:disabled){transform:scale(.96)}
+.pri{background:var(--g);border-color:var(--g);color:#fff}
+.lnk{background:transparent;border-color:transparent;color:var(--mu);min-height:44px}
+#themeBtn{position:fixed;top:10px;right:10px;width:auto;min-height:40px;padding:4px 12px;z-index:5;font-size:.85rem}
+#leaveBtn{position:fixed;top:10px;left:10px;width:auto;min-height:40px;padding:4px 12px;z-index:5;font-size:.85rem}
+.code{text-align:center;font-size:1.6rem;font-weight:800;letter-spacing:4px;color:var(--g)}
+ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+li{display:flex;justify-content:space-between;gap:8px}
+.msg{min-height:1.3em;text-align:center;color:var(--bad);font-weight:600}
+.top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--g);width:100%}
+#qtext{min-height:3.8em;font-size:1.15rem;font-weight:700}
+.opt{text-align:left;min-height:56px;visibility:hidden}
+.opt.on{visibility:visible}
+.opt:disabled{opacity:1;cursor:default}
+.opt.sel{border-color:var(--g);background:var(--gs)}
+.opt.ok{border-color:var(--g);background:var(--g);color:#fff}
+.opt.bad{border-color:var(--bad);background:var(--bads)}
+.opts{display:grid;gap:8px}
+#st{text-align:center;min-height:1.4em;font-weight:600;color:var(--mu)}
+#pl li{font-size:.95rem}
+#pl{max-height:20dvh;overflow:auto}
+.me{color:var(--g);font-weight:800}
+</style>
+</head>
+<body>
+<button id="themeBtn"></button>
+<button id="leaveBtn" hidden>SAIR DA SALA</button>
+
+<section id="home">
+  <div class="big">♻️</div>
+  <h1>DESCARTE CERTO</h1>
+  <p class="sub">Quiz Multiplayer<br>sobre lixo eletrônico</p>
+  <button class="pri" id="goCreate">CRIAR SALA</button>
+  <button id="goJoin">ENTRAR EM SALA</button>
+</section>
+
+<section id="create" hidden>
+  <h2>Criar sala</h2>
+  <input id="cName" placeholder="Seu nome" maxlength="16" autocomplete="off">
+  <input id="cPw" type="password" placeholder="Senha da sala" maxlength="30">
+  <div class="msg" id="cMsg"></div>
+  <button class="pri" id="doCreate">CRIAR SALA</button>
+  <button class="lnk" data-home>Voltar</button>
+</section>
+
+<section id="join" hidden>
+  <h2>Entrar em sala</h2>
+  <input id="jName" placeholder="Seu nome" maxlength="16" autocomplete="off">
+  <input id="jCode" placeholder="Código da sala" maxlength="5" autocapitalize="characters" autocomplete="off">
+  <input id="jPw" type="password" placeholder="Senha da sala" maxlength="30">
+  <select id="jRole"><option value="p">JOGAR</option><option value="s">ENTRAR COMO ESPECTADOR</option></select>
+  <div class="msg" id="jMsg"></div>
+  <button class="pri" id="doJoin">ENTRAR</button>
+  <button class="lnk" data-home>Voltar</button>
+</section>
+
+<section id="lobby" hidden>
+  <h1>DESCARTE CERTO</h1>
+  <div class="code" id="lCode"></div>
+  <div class="card"><b>Jogadores:</b><ul id="lPl"></ul><div class="sub" id="lSp" style="margin:8px 0 0"></div></div>
+  <div class="msg" id="lMsg"></div>
+  <button class="pri" id="start" hidden>JOGAR</button>
+  <p class="sub" id="wait" hidden>Aguardando o host iniciar a partida…</p>
+</section>
+
+<section id="game" hidden>
+  <div class="top"><span id="gN"></span><span id="gT"></span></div>
+  <div class="bar"><i id="gB"></i></div>
+  <div class="top" style="justify-content:flex-start;gap:10px"><span style="font-size:1.8rem" id="gE"></span><span class="sub" style="margin:0" id="gO"></span></div>
+  <div id="qtext"></div>
+  <div class="opts" id="opts"></div>
+  <div id="st"></div>
+  <div class="card"><b>🏆 PLACAR</b><ul id="pl"></ul></div>
+</section>
+
+<section id="end" hidden>
+  <h1>🏆 PARTIDA FINALIZADA</h1>
+  <div class="card"><ul id="rank"></ul></div>
+  <h2 id="mine"></h2>
+  <h2>PARABÉNS!</h2>
+  <button class="pri" id="back" hidden>VOLTAR AO LOBBY</button>
+  <p class="sub" id="backW" hidden>Aguarde o host voltar ao lobby.</p>
+</section>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,signInAnonymously} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getDatabase,ref,get,set,update,remove,onValue,onDisconnect,runTransaction,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// ===== CONFIGURAÇÃO =====
+const firebaseConfig={
+  apiKey:"AIzaSyCU0yGALGSn_jNkH01xEvEXAMPLE",
+  authDomain:"quiz-online-777.firebaseapp.com",
+  projectId:"quiz-online-777",
+  storageBucket:"quiz-online-777.firebasestorage.app",
+  messagingSenderId:"1003442896804",
+  appId:"1:1003442896804:web:804724db8adfc9367dcb31"
+};
+const DB_URL=""; // <<< PREENCHA com a URL do Realtime Database (ex.: https://SEU-BANCO-default-rtdb.firebaseio.com)
+
+// ===== PERGUNTAS (emoji, objeto, pergunta, alternativas na ordem original A–D) =====
+const QS=[
+["📱","Lixo eletrônico","O que é lixo eletrônico?",["Restos de alimentos","Aparelhos eletrônicos descartados","Resíduos de plantas","Papel usado"]],
+["♻️","E-lixo","Qual é outro nome para lixo eletrônico?",["E-lixo","Lixo orgânico","Lixo doméstico","Lixo natural"]],
+["💻","Celular antigo","Qual destes é um exemplo de lixo eletrônico?",["Garrafa de vidro","Folha de papel","Celular antigo","Casca de fruta"]],
+["☠️","Lixo eletrônico","Por que o lixo eletrônico pode prejudicar o meio ambiente?",["Porque desaparece rapidamente","Porque pode conter substâncias tóxicas","Porque produz oxigênio","Porque melhora o solo"]],
+["🗑️","Celular usado","O que devemos fazer com um celular que não usamos mais?",["Jogar no rio","Quebrá-lo e enterrar","Jogá-lo no lixo comum","Levá-lo a um ponto de coleta adequado"]],
+["🔋","Pilhas e baterias","Pilhas e baterias são consideradas resíduos eletrônicos?",["Sim","Não","Apenas as pilhas novas","Apenas as baterias de carros"]],
+["🚯","Pilha usada","Podemos jogar pilhas usadas no lixo comum?",["Sim, sempre","Sim, se estiverem descarregadas","Não, devem ser levadas a pontos de coleta adequados","Apenas durante a noite"]],
+["🌎","Lixo eletrônico","O descarte incorreto de lixo eletrônico pode contaminar:",["Apenas o ar","O solo e a água","Apenas os alimentos","Apenas os objetos"]],
+["♻️","Lixo eletrônico","O lixo eletrônico pode ser reciclado?",["Não, nunca","Apenas celulares","Apenas computadores","Sim, muitos materiais podem ser recuperados"]],
+["🪙","Aparelho eletrônico","Qual destes metais pode ser encontrado em alguns aparelhos eletrônicos?",["Ouro","Madeira","Papel","Algodão"]],
+["🖥️","Computador","Qual destes aparelhos pode se tornar lixo eletrônico?",["Computador","Banana","Caderno","Garfo"]],
+["🔐","Celular usado","O que devemos fazer antes de descartar um celular usado?",["Jogá-lo na água","Apagar os dados pessoais","Quebrar a tela","Retirar todos os botões"]],
+["🌱","Reciclagem","A reciclagem de eletrônicos ajuda a economizar:",["Recursos naturais","Água apenas","Energia solar apenas","Alimentos"]],
+["🔄","Reutilização","O que significa reutilizar um aparelho eletrônico?",["Jogá-lo fora","Queimá-lo","Continuar usando ou dar uma nova utilidade","Enterrá-lo"]],
+["🎁","Computador funcionando","Doar um computador que ainda funciona pode ajudar a:",["Aumentar o lixo eletrônico","Reduzir o descarte desnecessário","Contaminar o solo","Destruir o aparelho"]],
+["💧","Eletrônicos em rios","O que pode acontecer quando eletrônicos são descartados em rios?",["A água fica mais limpa","Os peixes produzem mais oxigênio","Pode ocorrer contaminação da água","O lixo desaparece imediatamente"]],
+["🔥","Lixo eletrônico","Por que não devemos queimar lixo eletrônico?",["Porque pode liberar substâncias tóxicas","Porque deixa os aparelhos novos","Porque produz água","Porque melhora a qualidade do ar"]],
+["🔌","Cabos e carregadores","Cabos e carregadores antigos podem ser reciclados?",["Não","Sim","Apenas se forem novos","Apenas se forem de celulares"]],
+["📍","Ponto de coleta","O que são pontos de coleta de lixo eletrônico?",["Locais para vender aparelhos novos","Locais preparados para receber resíduos eletrônicos","Lojas de jogos","Locais para jogar lixo orgânico"]],
+["🛒","Aparelhos duráveis","Comprar aparelhos mais duráveis ajuda a:",["Aumentar o lixo eletrônico","Reduzir a quantidade de descarte","Aumentar a poluição","Gastar mais recursos naturais"]],
+["🛠️","Aparelho antigo","Antes de comprar um aparelho novo, uma atitude sustentável é:",["Jogar o aparelho antigo fora imediatamente","Verificar se o antigo pode ser consertado","Quebrar o aparelho antigo","Comprar vários aparelhos"]],
+["🏭","Materiais reciclados","O que pode acontecer com materiais recuperados na reciclagem eletrônica?",["Podem ser usados na fabricação de novos produtos","Precisam ser queimados","São sempre enterrados","Não podem ser utilizados novamente"]],
+["📺","Televisão antiga","Uma televisão antiga pode ser considerada:",["Lixo orgânico","Lixo eletrônico","Resíduo alimentar","Lixo hospitalar"]],
+["👥","Responsabilidade","Quem deve ajudar a reduzir o problema do lixo eletrônico?",["Apenas os consumidores","Apenas as empresas","Apenas o governo","Consumidores, empresas e governos"]],
+["🌍","Lixo eletrônico","Qual é uma das melhores formas de reduzir o impacto do lixo eletrônico?",["Jogar aparelhos no lixo comum","Queimar aparelhos antigos","Reduzir o consumo, reutilizar, consertar e descartar corretamente","Jogar eletrônicos em rios"]]
+];
+// Gabarito (índice original) guardado fora das perguntas; NUNCA é gravado no Firebase.
+const K=[...'CDBABBBBACBCABAADBCADBCAB'].reverse().map(c=>'ABCD'.indexOf(c));
+const L=['A','B','C','D'];
+
+// ===== BASE =====
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const VIEWS=['home','create','join','lobby','game','end'];
+const S={uid:null,code:null,role:'p',name:'',nk:'',meta:null,players:{},specs:{},game:null,order:null,reveal:{},results:{},scores:{},my:null,cq:null,view:'home'};
+let unsubs=[],myUnsub=null,hostUnsub=null,hostTimer=null,offset=0;
+const show=v=>{S.view=v;VIEWS.forEach(x=>$(x).hidden=x!==v);$('leaveBtn').hidden=!S.code};
+const now=()=>Date.now()+offset;
+const R=p=>ref(db,'rooms/'+S.code+(p?'/'+p:''));
+
+let theme=localStorage.getItem('dc-theme')||'dark';
+const applyTheme=()=>{document.documentElement.dataset.t=theme;$('themeBtn').textContent=theme==='dark'?'☀️ Modo claro':'🌙 Modo escuro'};
+$('themeBtn').onclick=()=>{theme=theme==='dark'?'light':'dark';try{localStorage.setItem('dc-theme',theme)}catch(e){}applyTheme()};
+applyTheme();
+
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getDatabase(app,DB_URL||undefined);
+onValue(ref(db,'.info/serverTimeOffset'),s=>offset=s.val()||0);
+try{await signInAnonymously(auth);S.uid=auth.currentUser.uid}catch(e){alert('Falha ao autenticar. Ative o login anônimo no Firebase.')}
+
+const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(x=>x.toString(16).padStart(2,'0')).join('');
+const rnd=n=>{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n};
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+const genCode=()=>Array.from({length:5},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[rnd(32)]).join('');
+
+// ===== NAVEGAÇÃO INICIAL =====
+$('goCreate').onclick=()=>show('create');
+$('goJoin').onclick=()=>show('join');
+document.querySelectorAll('[data-home]').forEach(b=>b.onclick=()=>show('home'));
+
+async function claim(name){
+  const nk=name.toLowerCase().replace(/[.#$\[\]\/\s]/g,'_').slice(0,20);
+  const r=await runTransaction(R('names/'+nk),c=>(c===null||c===S.uid)?S.uid:undefined);
+  if(!r.committed)throw new Error('Esse nome já está em uso nesta sala.');
+  S.nk=nk;
+}
+async function cleanup(){S.code&&await Promise.allSettled([remove(R('players/'+S.uid)),remove(R('spectators/'+S.uid)),S.nk?remove(R('names/'+S.nk)):0,remove(R('join/'+S.uid))]);S.code=null;S.nk=''}
+
+$('doCreate').onclick=async()=>{
+  const name=$('cName').value.trim(),pw=$('cPw').value,m=$('cMsg');m.textContent='';
+  if(!name||pw.length<3){m.textContent='Informe o nome e uma senha (mín. 3 caracteres).';return}
+  try{
+    S.code=genCode();
+    if((await get(R('meta'))).exists()){S.code=null;m.textContent='Tente novamente.';return}
+    const h=await sha(S.code+':'+pw);
+    await set(R('pw'),h);await set(R('join/'+S.uid),h);
+    await claim(name);
+    await set(R('players/'+S.uid),{name,joinedAt:serverTimestamp()});
+    await set(R('meta'),{hostId:S.uid});
+    await set(R('game'),{status:'lobby'});
+    enter(name,'p');
+  }catch(e){const c=S.code;m.textContent=e.message.includes('PERMISSION')?'Sem permissão. Confira as regras do Firebase.':e.message;await cleanup()}
+};
+
+$('doJoin').onclick=async()=>{
+  const name=$('jName').value.trim(),code=$('jCode').value.trim().toUpperCase(),pw=$('jPw').value,m=$('jMsg');m.textContent='';
+  if(!name||code.length!==5||!pw){m.textContent='Preencha nome, código e senha.';return}
+  S.code=code;
+  try{
+    if(!(await get(R('meta'))).exists()){S.code=null;m.textContent='Sala inexistente.';return}
+    try{await set(R('join/'+S.uid),await sha(code+':'+pw))}catch(e){S.code=null;m.textContent='Senha incorreta.';return}
+    await claim(name);
+    const g=(await get(R('game'))).val();
+    const role=(g&&g.status!=='lobby')?'s':$('jRole').value;
+    await set(R((role==='p'?'players/':'spectators/')+S.uid),{name,joinedAt:serverTimestamp()});
+    enter(name,role);
+  }catch(e){m.textContent=e.message;await cleanup()}
+};
+
+// ===== SALA =====
+function listen(path,cb){unsubs.push(onValue(R(path),s=>cb(s.val())))}
+function enter(name,role){
+  S.name=name;S.role=role;S.cq=null;S.game=null;S.order=null;S.reveal={};S.results={};S.scores={};S.my=null;
+  onDisconnect(R((role==='p'?'players/':'spectators/')+S.uid)).remove();
+  onDisconnect(R('names/'+S.nk)).remove();
+  listen('meta',v=>{S.meta=v;renderLobby();hostTick()});
+  listen('players',v=>{S.players=v||{};takeover();renderLobby();renderBoard();hostTick()});
+  listen('spectators',v=>{S.specs=v||{};renderLobby()});
+  listen('order',v=>S.order=v);
+  listen('reveal',v=>S.reveal=v||{});
+  listen('results',v=>{S.results=v||{}});
+  listen('scores',v=>{S.scores=v||{};renderBoard();if(S.view==='end')renderEnd()});
+  listen('game',v=>{S.game=v||{status:'lobby'};route();hostTick()});
+  show('lobby');
+}
+const isHost=()=>S.meta&&S.meta.hostId===S.uid;
+function takeover(){
+  const ids=Object.keys(S.players);
+  if(S.role==='p'&&S.meta&&ids.length&&!S.players[S.meta.hostId]){
+    ids.sort((a,b)=>(S.players[a].joinedAt||0)-(S.players[b].joinedAt||0));
+    if(ids[0]===S.uid)set(R('meta/hostId'),S.uid).catch(()=>{});
+  }
+}
+function route(){
+  const g=S.game;
+  if(g.status==='lobby'){S.cq=null;show('lobby');renderLobby()}
+  else if(g.status==='end'){show('end');renderEnd()}
+  else{if(S.cq!==g.q)initQ(g.q);show('game')}
+}
+function renderLobby(){
+  if(!S.code)return;
+  $('lCode').textContent='Sala: '+S.code;
+  $('lPl').innerHTML=Object.entries(S.players).map(([u,p])=>`<li><span>• ${esc(p.name)}${S.meta&&S.meta.hostId===u?' 👑':''}</span>${u===S.uid?'<span class="me">você</span>':''}</li>`).join('');
+  const n=Object.keys(S.specs).length;
+  $('lSp').textContent=n?`👀 ${n} espectador${n>1?'es':''}`:'';
+  $('start').hidden=!(isHost()&&S.view==='lobby');
+  $('wait').hidden=isHost();
+}
+function renderBoard(){
+  const arr=Object.entries(S.players).map(([u,p])=>({u,n:p.name,s:S.scores[u]||0})).sort((a,b)=>b.s-a.s);
+  $('pl').innerHTML=arr.map((x,i)=>`<li class="${x.u===S.uid?'me':''}"><span>${i+1}º ${esc(x.n)}</span><span>${x.s} pts</span></li>`).join('');
+}
+function renderEnd(){
+  const arr=Object.entries(S.players).map(([u,p])=>({u,n:p.name,s:S.scores[u]||0})).sort((a,b)=>b.s-a.s);
+  $('rank').innerHTML=arr.map((x,i)=>`<li class="${x.u===S.uid?'me':''}"><span>${i+1}º ${esc(x.n)}</span><span>${x.s} pontos</span></li>`).join('');
+  $('mine').textContent=S.role==='p'?`Sua pontuação: ${S.scores[S.uid]||0} pts`:'Você acompanhou como espectador';
+  $('back').hidden=!isHost();$('backW').hidden=isHost();
+}
+
+// ===== PERGUNTA (cliente) =====
+function initQ(q){
+  S.cq=q;S.my=null;
+  myUnsub&&myUnsub();myUnsub=null;
+  if(S.role==='p')myUnsub=onValue(R(`answers/${q}/${S.uid}`),s=>S.my=s.val());
+  const b=$('opts');b.innerHTML='';
+  for(let k=0;k<4;k++){const x=document.createElement('button');x.className='opt';x.onclick=()=>answer(k);b.appendChild(x)}
+  $('gE').textContent=QS[q][0];$('gO').textContent=QS[q][1];$('gN').textContent=`Pergunta ${q+1}/25`;
+  renderBoard();
+}
+async function answer(k){
+  const g=S.game;
+  if(S.role!=='p'||S.my||g.status!=='question'||now()<g.answerFrom||now()>g.endsAt)return;
+  S.my={c:k};
+  try{await set(R(`answers/${S.cq}/${S.uid}`),{c:k,t:serverTimestamp()})}catch(e){S.my=null}
+}
+function renderGame(){
+  const g=S.game,q=g.q,Q=QS[q],perm=S.order&&S.order[q];
+  if(!perm||S.cq!==q)return;
+  const t=now(),el=t-g.startAt,qs=Q[2];
+  $('qtext').textContent=qs.slice(0,Math.max(0,Math.min(qs.length,Math.floor(el/25))));
+  let t0=qs.length*25+300;
+  const rv=g.status==='reveal'?S.reveal[q]:undefined;
+  const btns=$('opts').children;
+  for(let k=0;k<4;k++){
+    const txt=L[k]+') '+Q[3][perm[k]],c=Math.max(0,Math.min(txt.length,Math.floor((el-t0)/20)));
+    t0+=txt.length*20+250;
+    const b=btns[k];b.textContent=txt.slice(0,c);b.classList.toggle('on',c>0);
+    const can=S.role==='p'&&g.status==='question'&&t>=g.answerFrom&&t<g.endsAt&&!S.my;
+    b.disabled=!can;
+    b.classList.toggle('sel',!!S.my&&S.my.c===k&&rv===undefined);
+    b.classList.toggle('ok',rv===k);
+    b.classList.toggle('bad',rv!==undefined&&!!S.my&&S.my.c===k&&k!==rv);
+  }
+  const live=t>=g.answerFrom&&g.status==='question';
+  const sec=live?Math.max(0,Math.ceil((g.endsAt-t)/1000)):(g.status==='reveal'?0:10);
+  $('gT').textContent='⏱️ '+sec+'s';
+  $('gB').style.width=(live?Math.max(0,(g.endsAt-t)/100):(g.status==='reveal'?0:100))+'%';
+  let st='';
+  if(g.status==='reveal'){
+    const r=(S.results[q]||{})[S.uid];
+    st=S.role!=='p'?'Resposta revelada':r===1?'✅ Correto! +10 pontos':r===0?'❌ Resposta errada':'⏱️ Tempo esgotado';
+  }else if(!live)st='Leia com atenção…';
+  else st=S.role!=='p'?'👀 Você está assistindo':S.my?'Resposta enviada! Aguarde…':'Escolha sua resposta';
+  $('st').textContent=st;
+}
+setInterval(()=>{if(S.code&&S.game&&S.view==='game')renderGame()},80);
+
+// ===== HOST =====
+$('start').onclick=async()=>{
+  $('lMsg').textContent='';
+  try{
+    const order=QS.map(()=>shuffle([0,1,2,3])),sc={};
+    for(const u in S.players)sc[u]=0;
+    S.order=order;
+    await update(R(''),{order,scores:sc,results:null,reveal:null});
+    await startQ(0);
+  }catch(e){$('lMsg').textContent='Não foi possível iniciar: '+e.message}
+};
+function startQ(i){
+  const Q=QS[i],perm=S.order[i];
+  let ms=Q[2].length*25+300;
+  for(const p of perm)ms+=(Q[3][p].length+3)*20+250;
+  const s=now()+1500;
+  return update(R('game'),{status:'question',q:i,startAt:s,answerFrom:s+ms,endsAt:s+ms+10000});
+}
+function hostTick(){
+  clearTimeout(hostTimer);hostUnsub&&hostUnsub();hostUnsub=null;
+  if(!S.code||!isHost()||!S.game||!S.order)return;
+  const g=S.game;
+  if(g.status==='question'){
+    hostTimer=setTimeout(()=>closeQ(g.q),Math.max(0,g.endsAt+400-now()));
+    hostUnsub=onValue(R('answers/'+g.q),s=>{
+      const n=Object.keys(s.val()||{}).length,tot=Object.keys(S.players).length;
+      if(tot&&n>=tot)closeQ(g.q);
+    });
+  }else if(g.status==='reveal'){
+    hostTimer=setTimeout(()=>g.q<24?startQ(g.q+1):update(R('game'),{status:'end'}),Math.max(0,g.revealUntil-now()));
+  }
+}
+async function closeQ(q){
+  if(S.closing===q||!S.game||S.game.status!=='question'||S.game.q!==q)return;
+  S.closing=q;
+  try{
+    const a=(await get(R('answers/'+q))).val()||{},g=S.game,cp=S.order[q].indexOf(K[q]),up={},res={};
+    for(const u in S.players){
+      const x=a[u];let r=2;
+      if(x)r=(x.c===cp&&x.t>=g.answerFrom&&x.t<=g.endsAt+1500)?1:0;
+      res[u]=r;up['scores/'+u]=(S.scores[u]||0)+(r===1?10:0);
+    }
+    up['results/'+q]=res;up['reveal/'+q]=cp;up['game/status']='reveal';up['game/revealUntil']=now()+4500;
+    await update(R(''),up);
+  }catch(e){S.closing=null}
+}
+$('back').onclick=()=>update(R(''),{game:{status:'lobby'},order:null,reveal:null,results:null,scores:null}).catch(()=>{});
+
+// ===== SAIR =====
+$('leaveBtn').onclick=async()=>{
+  unsubs.forEach(f=>f());unsubs=[];myUnsub&&myUnsub();hostUnsub&&hostUnsub();clearTimeout(hostTimer);
+  await cleanup();S.meta=null;S.players={};show('home');
+};
+show('home');
+</script>
+</body>
+</html>
